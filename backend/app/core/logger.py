@@ -63,5 +63,5 @@ def setup_logging():
         enqueue=True # 异步写入
     )
     
-    logger.info("Logging system initialized")
+    logger.success("✔ 日志系统初始化成功")
     return logger

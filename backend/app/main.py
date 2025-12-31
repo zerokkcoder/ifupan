@@ -32,7 +32,7 @@ def create_tables():
             MonitorAiConfig, MonitorAiAgent,
             AntNewsSearchRecord, AutomationOperationLog
         ])
-    logger.info("Database tables checked/created")
+    logger.success("✔ 数据库表已检查/创建")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,19 +41,19 @@ async def lifespan(app: FastAPI):
     # 连接数据库
     try:
         db.connect()
-        logger.info("Database connected")
+        logger.success("✔  数据库连接成功")
         create_tables()
     except Exception as e:
-        logger.error(f"Database connection error: {e}")
+        logger.error(f"❌ 数据库连接失败: {e}")
         
-    logger.info("Application startup complete")
+    logger.success("✔ 应用启动完成")
     yield
     
     # 关闭数据库连接
     if not db.is_closed():
         db.close()
-        logger.info("Database disconnected")
-    logger.info("Application shutdown")
+        logger.success("✔ 数据库连接已断开")
+    logger.success("✔ 应用已关闭")
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -75,5 +75,5 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 @app.get("/")
 def root():
-    logger.info("Root endpoint accessed")
+    logger.info("✔ 根接口访问成功")
     return {"message": "Welcome to Stock Fupan API"}
