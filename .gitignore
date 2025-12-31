@@ -12,9 +12,9 @@ frontend/.output/
 frontend/.nuxt/
 
 # Backend
-backend/venv/
-backend/.venv/
-backend/__pycache__/
-backend/.env
-backend/.pytest_cache/
+**/venv/
+**/.venv/
+**/__pycache__/
+**/.env
+**/.pytest_cache/
 *.pyc
