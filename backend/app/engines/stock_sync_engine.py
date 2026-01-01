@@ -20,6 +20,10 @@ MAX_WORKERS = 10  # 并发数量
 
 class StockSyncEngine:
     FORCE_UPDATE_CONFIG_KEY = 'STOCK_SYNC_FORCE_UPDATE'
+    # 默认调度间隔：每天 (秒)
+    # 虽然是 1 天，但 run() 内部有预检查，所以可以设置得更短（例如 4 小时）以确保及时性
+    # 这里设置为 12 小时检查一次
+    SCHEDULE_INTERVAL = 43200 
 
     def __init__(self):
         self.session = requests.Session()
