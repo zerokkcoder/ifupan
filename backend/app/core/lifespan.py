@@ -4,6 +4,7 @@ from loguru import logger
 from app.core.logger import setup_logging
 from app.db.session import db
 from app.db.init_db import init_db
+from app.core.data_updater import data_updater
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -21,8 +22,14 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"❌ 数据库连接失败: {e}")
         
+    # 启动数据增量更新模块
+    data_updater.start()
+
     logger.success("✔ 应用启动完成")
     yield
+    
+    # 停止数据增量更新模块
+    data_updater.stop()
     
     # 关闭数据库连接
     if not db.is_closed():
