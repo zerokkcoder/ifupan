@@ -14,8 +14,8 @@ class BaseStockInfo(BaseModel):
     cnspell = CharField(null=True, help_text="拼音首字母", comment="拼音首字母")
     market = CharField(null=True, help_text="市场分类", comment="市场分类")
     list_date = DateField(null=True, help_text="上市日期", comment="上市日期")
-    act_name = CharField(null=True, help_text="行业活动名称", comment="行业活动名称")
-    act_ent_type = CharField(null=True, help_text="企业类型", comment="企业类型")
+    act_name = CharField(null=True, help_text="实控人名称", comment="实控人名称")
+    act_ent_type = CharField(null=True, help_text="实控人企业性质", comment="实控人企业性质")
     last_data = DateField(null=True, help_text="最后刷新日期", comment="最后刷新日期")
 
     class Meta:
