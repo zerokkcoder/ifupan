@@ -10,3 +10,4 @@ cryptography>=42.0.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0
 pypinyin>=0.50.0
+akshare>=1.13.0

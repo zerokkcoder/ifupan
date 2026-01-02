@@ -8,6 +8,8 @@ import random
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from threading import Lock
 from pypinyin import pinyin, Style
+import akshare as ak
+import ast
 
 from app.db.session import db
 from app.models.base_data import BaseStockInfo
@@ -15,11 +17,11 @@ from loguru import logger
 
 # 配置
 LIST_URL = "http://www.haiguitouzi.com/doc/intro_stock_list.php"
-DETAIL_BASE_URL = "http://www.haiguitouzi.com/doc/intro_stock.php"
 MAX_WORKERS = 10  # 并发数量
 
 class StockSyncEngine:
     FORCE_UPDATE_CONFIG_KEY = 'STOCK_SYNC_FORCE_UPDATE'
+    ENABLE_UPDATE_CONFIG_KEY = 'STOCK_SYNC_ENABLE'
     # 默认调度间隔：每天 (秒)
     # 虽然是 1 天，但 run() 内部有预检查，所以可以设置得更短（例如 4 小时）以确保及时性
     # 这里设置为 12 小时检查一次
@@ -159,8 +161,15 @@ class StockSyncEngine:
         logger.success(f"✔ 列表保存完成")
 
     def fetch_single_detail(self, stock_id, ts_code, symbol, name):
-        """获取单个股票详情的工作函数"""
-        url = f"{DETAIL_BASE_URL}?wd={symbol}"
+        """获取单个股票详情的工作函数 (使用 Akshare)"""
+        # 构造 akshare 需要的 symbol (如 SZ000001)
+        ak_symbol = symbol
+        try:
+            market = ts_code.split('.')[-1]
+            ak_symbol = f"{market}{symbol}"
+        except:
+            pass
+
         result = {
             "id": stock_id,
             "ts_code": ts_code,
@@ -170,41 +179,63 @@ class StockSyncEngine:
         }
         
         try:
-            # 随机延迟，避免被封
+            # 随机延迟，避免被封 (虽然 API 可能不需要，但作为礼貌)
             time.sleep(random.uniform(0.1, 0.5))
             
-            response = self.session.get(url, timeout=15)
-            response.encoding = 'utf-8'
+            # 使用 akshare 获取数据
+            # 注意: stock_individual_basic_info_xq 返回的是 DataFrame
+            df = ak.stock_individual_basic_info_xq(symbol=ak_symbol)
             
-            if response.status_code != 200:
-                result["error"] = f"HTTP {response.status_code}"
-                return result
+            if df is None or df.empty:
+                 result["error"] = "No data returned"
+                 return result
 
-            soup = BeautifulSoup(response.text, 'html.parser')
-            
-            # 查找文本辅助函数
-            def find_value(label):
-                elements = soup.find_all(string=lambda text: text and label in text)
-                for element in elements:
-                    txt = element.strip()
-                    if label in txt:
-                        # 处理中文或英文冒号
-                        parts = txt.replace('：', ':').split(':')
-                        if len(parts) > 1:
-                            return parts[1].strip()
-                return None
-
-            industry = find_value("所属行业")
-            area = find_value("所在地区")
-            list_date_str = find_value("上市时间")
+            # 转换为字典: item -> value
+            # 假设 df 有 item 和 value 列
+            data_dict = df.set_index('item')['value'].to_dict()
             
             updates = {}
-            if industry: updates['industry'] = industry
-            if area: updates['area'] = area
-            if list_date_str:
-                parsed = self.parse_date(list_date_str)
-                if parsed: updates['list_date'] = parsed
             
+            # 映射字段
+            # 1. 行业
+            if 'affiliate_industry' in data_dict and data_dict['affiliate_industry']:
+                ind_val = data_dict['affiliate_industry']
+                # 可能是 dict 或 string representation
+                if isinstance(ind_val, dict):
+                     updates['industry'] = ind_val.get('ind_name')
+                elif isinstance(ind_val, str):
+                    try:
+                        # 尝试 eval 安全解析，或者简单提取
+                        if ind_val.startswith('{'):
+                             ind_dict = ast.literal_eval(ind_val)
+                             updates['industry'] = ind_dict.get('ind_name')
+                        else:
+                             updates['industry'] = ind_val
+                    except:
+                        updates['industry'] = ind_val # Fallback
+
+            # 2. 地区
+            if 'provincial_name' in data_dict and data_dict['provincial_name']:
+                updates['area'] = data_dict['provincial_name']
+
+            # 3. 上市时间
+            if 'listed_date' in data_dict and data_dict['listed_date']:
+                try:
+                    ts = int(data_dict['listed_date'])
+                    # 毫秒 -> date
+                    d = datetime.date.fromtimestamp(ts / 1000)
+                    updates['list_date'] = d
+                except:
+                    pass
+
+            # 4. 实控人 (act_name)
+            if 'actual_controller' in data_dict and data_dict['actual_controller']:
+                 updates['act_name'] = data_dict['actual_controller']
+            
+            # 5. 企业类型 (act_ent_type)
+            if 'classi_name' in data_dict and data_dict['classi_name']:
+                 updates['act_ent_type'] = data_dict['classi_name']
+
             # 始终将 last_data 更新为今天
             updates['last_data'] = datetime.date.today()
             

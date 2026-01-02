@@ -55,29 +55,46 @@ class DataUpdater:
         try:
             logger.info(f"🚀 [DataUpdater] 启动任务: {engine_name}")
             
-            # 实例化
-            engine = EngineClass()
+            # 检查配置 (启用开关 和 强制更新)
+            enable_key = getattr(EngineClass, 'ENABLE_UPDATE_CONFIG_KEY', None)
+            force_key = getattr(EngineClass, 'FORCE_UPDATE_CONFIG_KEY', None)
             
-            # 检查是否有强制更新配置
+            is_enabled = True # 默认为启用
             force_update = False
-            config_key = getattr(EngineClass, 'FORCE_UPDATE_CONFIG_KEY', None)
-            if config_key:
+            
+            if enable_key or force_key:
                 # 临时连接数据库读取配置
-                # 注意：在多线程环境中，建议每个线程管理自己的连接或使用连接池
-                # Peewee 的 db 对象是线程本地的，但需要确保连接被正确管理
                 if db.is_closed():
                     db.connect(reuse_if_open=True)
                 try:
-                    config = DataDictionary.get_or_none(DataDictionary.dict_key == config_key)
-                    if config and config.dict_value == '1':
-                        force_update = True
-                        logger.info(f"⚡ [DataUpdater] 引擎 {engine_name} 强制更新已开启")
+                    # 1. 检查启用开关
+                    if enable_key:
+                        config = DataDictionary.get_or_none(DataDictionary.dict_key == enable_key)
+                        if config:
+                            # 支持 0, false, off 为禁用
+                            if config.dict_value.lower() in ['0', 'false', 'off']:
+                                is_enabled = False
+                                logger.info(f"🛑 [DataUpdater] 引擎 {engine_name} 已通过配置禁用 ({enable_key}=0)")
+                    
+                    # 2. 检查强制更新 (仅当启用时)
+                    if is_enabled and force_key:
+                        config = DataDictionary.get_or_none(DataDictionary.dict_key == force_key)
+                        if config and config.dict_value == '1':
+                            force_update = True
+                            logger.info(f"⚡ [DataUpdater] 引擎 {engine_name} 强制更新已开启")
+                            
                 except Exception as cfg_err:
                     logger.error(f"❌ [DataUpdater] 读取引擎配置失败: {cfg_err}")
                 finally:
                     if not db.is_closed():
                         db.close()
+            
+            if not is_enabled:
+                return
 
+            # 实例化
+            engine = EngineClass()
+            
             # 运行引擎 (传递 force_update 参数)
             engine.run(force_update=force_update)
             logger.success(f"✔ [DataUpdater] 任务完成: {engine_name}")
